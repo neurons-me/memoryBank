@@ -1,0 +1,15 @@
+[package]
+name = "memorybank-daemon"
+version = "0.1.0"
+edition = "2021"
+description = "The background clipboard manager daemon for CtrlM. Runs silently, monitors system clipboard and manages multi-slot memory."
+authors = ["José Abella <jose@neurons.me>"]
+license = "MIT"
+repository = "https://github.com/neurons-me/ctrlm"
+
+[dependencies]
+arboard = "3.2.0" 
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+shellexpand = "3.1.1"
+anyhow = "1.0"
