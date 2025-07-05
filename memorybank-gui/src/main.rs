@@ -1,13 +1,19 @@
+//memorybank-gui/src/main.rs
 use eframe::egui::{self, ComboBox, RichText, Layout, Align};
 use std::os::unix::net::UnixStream;
 use std::io::{Write, BufReader, BufRead};
 use serde::{Serialize, Deserialize};
+
 const SOCKET_PATH: &str = "/tmp/memorybank.sock";
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 struct Config {
     modifier_1: String,
     modifier_2: String,
     modifier_3: String,
+    paste_modifier_1: String,
+    paste_modifier_2: String,
+    paste_modifier_3: String,
     is_enabled: bool,
 }
 
@@ -52,50 +58,107 @@ impl eframe::App for MemoryBankApp {
             ui.label("Select your preferred modifier keys:");
 
             let all_modifiers = vec!["Command", "Control", "Option", "Shift", "None"];
-            let config_snapshot = self.config.clone();
 
-            ComboBox::from_label("Choose Key 1")
-                .selected_text(&config_snapshot.modifier_1)
-                .show_ui(ui, |ui| {
-                    for &modifier in &all_modifiers {
-                        if modifier != config_snapshot.modifier_2 && modifier != config_snapshot.modifier_3 {
-                            ui.selectable_value(&mut self.config.modifier_1, modifier.to_string(), modifier);
-                        }
-                    }
+            ui.horizontal(|ui| {
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Copy").strong());
+                    ui.push_id("copy", |ui| {
+                        ComboBox::from_id_source("key_1")
+                            .selected_text(&self.config.modifier_1)
+                            .show_ui(ui, |ui| {
+                                for &modifier in &all_modifiers {
+                                    if modifier != self.config.modifier_2 && modifier != self.config.modifier_3 {
+                                        ui.selectable_value(&mut self.config.modifier_1, modifier.to_string(), modifier);
+                                    }
+                                }
+                            });
+
+                        ComboBox::from_id_source("key_2")
+                            .selected_text(&self.config.modifier_2)
+                            .show_ui(ui, |ui| {
+                                for &modifier in &all_modifiers {
+                                    if modifier != self.config.modifier_1 && modifier != self.config.modifier_3 {
+                                        ui.selectable_value(&mut self.config.modifier_2, modifier.to_string(), modifier);
+                                    }
+                                }
+                            });
+
+                        ComboBox::from_id_source("key_3")
+                            .selected_text(&self.config.modifier_3)
+                            .show_ui(ui, |ui| {
+                                for &modifier in &all_modifiers {
+                                    if modifier != self.config.modifier_1 && modifier != self.config.modifier_2 {
+                                        ui.selectable_value(&mut self.config.modifier_3, modifier.to_string(), modifier);
+                                    }
+                                }
+                            });
+                    });
                 });
 
-            ComboBox::from_label("Choose Key 2")
-                .selected_text(&config_snapshot.modifier_2)
-                .show_ui(ui, |ui| {
-                    for &modifier in &all_modifiers {
-                        if modifier != config_snapshot.modifier_1 && modifier != config_snapshot.modifier_3 {
-                            ui.selectable_value(&mut self.config.modifier_2, modifier.to_string(), modifier);
-                        }
-                    }
-                });
+                ui.vertical(|ui| {
+                    ui.label(RichText::new("Paste").strong());
+                    ui.push_id("paste", |ui| {
+                        ComboBox::from_id_source("key_1")
+                            .selected_text(&self.config.paste_modifier_1)
+                            .show_ui(ui, |ui| {
+                                for &modifier in &all_modifiers {
+                                    if modifier != self.config.paste_modifier_2 && modifier != self.config.paste_modifier_3 {
+                                        ui.selectable_value(&mut self.config.paste_modifier_1, modifier.to_string(), modifier);
+                                    }
+                                }
+                            });
 
-            ComboBox::from_label("Choose Key 3")
-                .selected_text(&config_snapshot.modifier_3)
-                .show_ui(ui, |ui| {
-                    for &modifier in &all_modifiers {
-                        if modifier != config_snapshot.modifier_1 && modifier != config_snapshot.modifier_2 {
-                            ui.selectable_value(&mut self.config.modifier_3, modifier.to_string(), modifier);
-                        }
-                    }
+                        ComboBox::from_id_source("key_2")
+                            .selected_text(&self.config.paste_modifier_2)
+                            .show_ui(ui, |ui| {
+                                for &modifier in &all_modifiers {
+                                    if modifier != self.config.paste_modifier_1 && modifier != self.config.paste_modifier_3 {
+                                        ui.selectable_value(&mut self.config.paste_modifier_2, modifier.to_string(), modifier);
+                                    }
+                                }
+                            });
+
+                        ComboBox::from_id_source("key_3")
+                            .selected_text(&self.config.paste_modifier_3)
+                            .show_ui(ui, |ui| {
+                                for &modifier in &all_modifiers {
+                                    if modifier != self.config.paste_modifier_1 && modifier != self.config.paste_modifier_2 {
+                                        ui.selectable_value(&mut self.config.paste_modifier_3, modifier.to_string(), modifier);
+                                    }
+                                }
+                            });
+                    });
                 });
+            });
 
             ui.separator();
+
             let mut parts = vec![
                 self.config.modifier_1.clone(),
                 self.config.modifier_2.clone(),
-                self.config.modifier_3.clone()
+                self.config.modifier_3.clone(),
             ];
             parts.retain(|p| p != "None");
-            let shortcut = format!("{} + Number [0-9]", parts.join(" + "));
+            let shortcut = format!("Copy: {} + Number [0-9]", parts.join(" + "));
             ui.label(RichText::new("Current shortcut format:").strong());
             ui.label(RichText::new(shortcut));
+
+            let mut paste_parts = vec![
+                self.config.paste_modifier_1.clone(),
+                self.config.paste_modifier_2.clone(),
+                self.config.paste_modifier_3.clone(),
+            ];
+            paste_parts.retain(|p| p != "None");
+            let paste_shortcut = format!("Paste: {} + Number [0-9]", paste_parts.join(" + "));
+            ui.label(RichText::new(paste_shortcut));
+
+            if parts == paste_parts {
+                ui.colored_label(egui::Color32::RED, "⚠️ Copy y Paste no pueden tener la misma combinación");
+            }
+
             ui.separator();
             ui.checkbox(&mut self.config.is_enabled, "Enable MemoryBank");
+
             if self.config != self.last_sent_config {
                 send_config_to_daemon(&self.config);
                 self.last_sent_config = self.config.clone();
@@ -115,7 +178,7 @@ fn main() -> eframe::Result<()> {
     let config = fetch_config_from_daemon().unwrap_or_default();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size(egui::vec2(360.0, 220.0)),
+            .with_inner_size(egui::vec2(460.0, 300.0)),
         ..Default::default()
     };
 

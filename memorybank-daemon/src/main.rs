@@ -1,15 +1,21 @@
+//memorybank-daemon/src/main.rs
 use serde::{Serialize, Deserialize};
 use tokio::net::UnixListener;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 use std::sync::{Arc, Mutex};
 use std::path::Path;
+mod keywatch;
+use keywatch::start_key_watcher;
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
-struct Config {
-    modifier_1: String,
-    modifier_2: String,
-    modifier_3: String,
-    is_enabled: bool,
+pub struct Config {
+    pub modifier_1: String,
+    pub modifier_2: String,
+    pub modifier_3: String,
+    pub paste_modifier_1: String,
+    pub paste_modifier_2: String,
+    pub paste_modifier_3: String,
+    pub is_enabled: bool,
 }
 
 #[derive(Deserialize)]
@@ -31,7 +37,7 @@ async fn main() -> anyhow::Result<()> {
 
     let initial_config: Config = confy::load("memorybank-daemon", None).unwrap_or_default();
     let config = Arc::new(Mutex::new(initial_config));
-
+    start_key_watcher(config.clone());
     println!("📡 MemoryBank Daemon listening at {}", socket_path);
     let listener = UnixListener::bind(socket_path)?;
 
