@@ -1,23 +1,20 @@
-//memorybank-daemon/src/keywatch.rs
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
-
+use std::time::{Duration, Instant};
 use device_query::{DeviceQuery, DeviceState, Keycode};
-
 use crate::Config;
 
 pub fn start_key_watcher(config: Arc<Mutex<Config>>) {
     thread::spawn(move || {
         let device_state = DeviceState::new();
         let mut last_keys = HashSet::new();
-
+        let mut last_trigger_time = Instant::now();
         loop {
+            let config = config.lock().unwrap().clone();
             let keys: HashSet<_> = device_state.get_keys().into_iter().collect();
-
             if keys != last_keys {
-                let config = config.lock().unwrap().clone();
+                println!("🔍 Keys pressed: {:?}", keys);
 
                 if config.is_enabled {
                     let copy_modifiers = vec![
@@ -31,10 +28,8 @@ pub fn start_key_watcher(config: Arc<Mutex<Config>>) {
                         .iter()
                         .filter_map(|m| parse_keycode(m))
                         .collect();
-
                     // Check if all modifiers are currently pressed
                     let all_mods_pressed = pressed_mods.iter().all(|key| keys.contains(key));
-
                     // Check if any number key is pressed (0–9)
                     let number_keys = [
                         Keycode::Key0, Keycode::Key1, Keycode::Key2, Keycode::Key3, Keycode::Key4,
@@ -42,13 +37,13 @@ pub fn start_key_watcher(config: Arc<Mutex<Config>>) {
                     ];
                     let number_pressed = number_keys.iter().find(|key| keys.contains(key));
 
-                    // For debugging: show all currently pressed keys
-                    println!("🔍 Keys pressed: {:?}", keys);
-
                     if all_mods_pressed {
                         if let Some(num_key) = number_pressed {
-                            println!("🧠 Atajo de COPY detectado: {:?} + {:?}", copy_modifiers, num_key);
-                            // Aquí puedes insertar lógica para activar el slot correspondiente.
+                            println!("✅ Combination detected: {:?} + {:?}", copy_modifiers, num_key);
+                            if last_trigger_time.elapsed() > Duration::from_millis(500) {
+                                trigger_copy_slot(&copy_modifiers, num_key);
+                                last_trigger_time = Instant::now();
+                            }
                         }
                     }
                 }
@@ -64,9 +59,9 @@ pub fn start_key_watcher(config: Arc<Mutex<Config>>) {
 fn parse_keycode(s: &str) -> Option<Keycode> {
     match s.to_lowercase().as_str() {
         "ctrl" | "control" => Some(Keycode::LControl),
-        "shift" => Some(Keycode::LShift),
-        "alt" | "option" => Some(Keycode::LAlt),
-        "cmd" | "command" | "meta" => Some(Keycode::LMeta),
+        "shift" | "lshift" => Some(Keycode::LShift),
+        "alt" | "option" | "lalt" | "loption" => Some(Keycode::LAlt),
+        "cmd" | "command" | "meta" | "lcmd" | "lmeta" => Some(Keycode::LMeta),
         "none" => None,
         "1" => Some(Keycode::Key1),
         "2" => Some(Keycode::Key2),
@@ -80,4 +75,9 @@ fn parse_keycode(s: &str) -> Option<Keycode> {
         "0" => Some(Keycode::Key0),
         _ => None,
     }
+}
+
+fn trigger_copy_slot(mods: &Vec<String>, key: &Keycode) {
+    println!("🧠 Atajo de COPY detectado: {:?} + {:?}", mods, key);
+    // TODO: aquí irá la lógica para copiar al slot correspondiente.
 }

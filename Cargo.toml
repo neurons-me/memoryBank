@@ -3,19 +3,7 @@ members = [
     "memoryBank-daemon",
     "memoryBank-gui"
 ]
-
-[workspace.package]
-name = "memorybank"
-version = "0.1.0"
-edition = "2021"
-description = "🧠 CtrlM: a smart multi-slot clipboard manager daemon with GUI controls. Inspired by creative flow, built for developers and thinkers."
-authors = ["José Abella <jose@neurons.me>"]
-license = "MIT"
-readme = "README.md"
-homepage = "https://neurons.me"
-repository = "https://github.com/neurons-me/ctrlm"
-keywords = ["clipboard", "daemon", "productivity", "gui", "neurons"]
-categories = ["command-line-utilities", "gui", "productivity"]
+resolver = "2"
 
 [workspace.metadata]
-maintainers = ["José Abella <jose@neurons.me>"]
+maintainers = ["suiGn <admin@neurons.me>"]

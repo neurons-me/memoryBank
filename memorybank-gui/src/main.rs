@@ -1,43 +1,10 @@
-//memorybank-gui/src/main.rs
-use eframe::egui::{self, ComboBox, RichText, Layout, Align};
-use std::os::unix::net::UnixStream;
-use std::io::{Write, BufReader, BufRead};
-use serde::{Serialize, Deserialize};
-
-const SOCKET_PATH: &str = "/tmp/memorybank.sock";
-
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
-struct Config {
-    modifier_1: String,
-    modifier_2: String,
-    modifier_3: String,
-    paste_modifier_1: String,
-    paste_modifier_2: String,
-    paste_modifier_3: String,
-    is_enabled: bool,
-}
-
-fn fetch_config_from_daemon() -> Option<Config> {
-    let mut stream = UnixStream::connect(SOCKET_PATH).ok()?;
-    let mut reader = BufReader::new(stream.try_clone().ok()?);
-    let _ = stream.write_all(b"{\"type\":\"get_config\"}\n").ok()?;
-
-    let mut response = String::new();
-    reader.read_line(&mut response).ok()?;
-    serde_json::from_str::<Config>(&response).ok()
-}
-
-fn send_config_to_daemon(cfg: &Config) {
-    if let Ok(mut stream) = UnixStream::connect(SOCKET_PATH) {
-        if let Ok(json) = serde_json::to_string(&serde_json::json!({
-            "type": "update_config",
-            "data": cfg
-        })) {
-            let _ = stream.write_all(json.as_bytes());
-            let _ = stream.write_all(b"\n");
-        }
-    }
-}
+mod modifiers;
+use modifiers::modifier_selector_ui;
+mod validation;
+use validation::validate_combinations;
+mod config;
+use config::{Config, fetch_config_from_daemon, send_config_to_daemon};
+use eframe::egui::{self, RichText, Layout, Align, Color32};
 
 #[derive(Default)]
 struct MemoryBankApp {
@@ -48,142 +15,121 @@ struct MemoryBankApp {
 impl eframe::App for MemoryBankApp {
     fn update(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.heading("MemoryBank Shortcut Preferences");
-                ui.hyperlink_to("Help", "https://neurons.me")
-                    .on_hover_text("More info at neurons.me");
+            ui.with_layout(Layout::left_to_right(Align::TOP), |ui| {
+                ui.heading(
+                    RichText::new("MemoryBank")
+                        .color(Color32::from_rgb(220, 220, 220))
+                        .size(20.0)
+                        .strong()
+                );
+                ui.with_layout(Layout::right_to_left(Align::TOP), |ui| {
+                    ui.hyperlink_to(RichText::new("Help").color(Color32::from_rgb(120, 170, 255)), "https://neurons.me")
+                        .on_hover_text("More info at neurons.me");
+                });
             });
 
             ui.separator();
-            ui.label("Select your preferred modifier keys:");
-
-            let all_modifiers = vec!["Command", "Control", "Option", "Shift", "None"];
+            ui.label("Configure your key combination preferences:");
+            ui.separator();
 
             ui.horizontal(|ui| {
+                let _copy_modifiers = [&self.config.modifier_1, &self.config.modifier_2, &self.config.modifier_3];
+                ui.add_space(24.0);
                 ui.vertical(|ui| {
                     ui.label(RichText::new("Copy").strong());
                     ui.push_id("copy", |ui| {
-                        ComboBox::from_id_source("key_1")
-                            .selected_text(&self.config.modifier_1)
-                            .show_ui(ui, |ui| {
-                                for &modifier in &all_modifiers {
-                                    if modifier != self.config.modifier_2 && modifier != self.config.modifier_3 {
-                                        ui.selectable_value(&mut self.config.modifier_1, modifier.to_string(), modifier);
-                                    }
-                                }
-                            });
-
-                        ComboBox::from_id_source("key_2")
-                            .selected_text(&self.config.modifier_2)
-                            .show_ui(ui, |ui| {
-                                for &modifier in &all_modifiers {
-                                    if modifier != self.config.modifier_1 && modifier != self.config.modifier_3 {
-                                        ui.selectable_value(&mut self.config.modifier_2, modifier.to_string(), modifier);
-                                    }
-                                }
-                            });
-
-                        ComboBox::from_id_source("key_3")
-                            .selected_text(&self.config.modifier_3)
-                            .show_ui(ui, |ui| {
-                                for &modifier in &all_modifiers {
-                                    if modifier != self.config.modifier_1 && modifier != self.config.modifier_2 {
-                                        ui.selectable_value(&mut self.config.modifier_3, modifier.to_string(), modifier);
-                                    }
-                                }
-                            });
+                        modifier_selector_ui(
+                            ui,
+                            &mut [
+                                &mut self.config.modifier_1,
+                                &mut self.config.modifier_2,
+                                &mut self.config.modifier_3,
+                            ],
+                            "copy_mod",
+                            &[
+                                self.config.paste_modifier_1.clone(),
+                                self.config.paste_modifier_2.clone(),
+                                self.config.paste_modifier_3.clone(),
+                            ],
+                        );
                     });
+                    ui.label("+ Number [0-9]");
                 });
+
+                ui.add_space(16.0); // separación entre columnas
+                ui.separator();      // línea divisoria vertical
+                ui.add_space(16.0);
 
                 ui.vertical(|ui| {
                     ui.label(RichText::new("Paste").strong());
                     ui.push_id("paste", |ui| {
-                        ComboBox::from_id_source("key_1")
-                            .selected_text(&self.config.paste_modifier_1)
-                            .show_ui(ui, |ui| {
-                                for &modifier in &all_modifiers {
-                                    if modifier != self.config.paste_modifier_2 && modifier != self.config.paste_modifier_3 {
-                                        ui.selectable_value(&mut self.config.paste_modifier_1, modifier.to_string(), modifier);
-                                    }
-                                }
-                            });
-
-                        ComboBox::from_id_source("key_2")
-                            .selected_text(&self.config.paste_modifier_2)
-                            .show_ui(ui, |ui| {
-                                for &modifier in &all_modifiers {
-                                    if modifier != self.config.paste_modifier_1 && modifier != self.config.paste_modifier_3 {
-                                        ui.selectable_value(&mut self.config.paste_modifier_2, modifier.to_string(), modifier);
-                                    }
-                                }
-                            });
-
-                        ComboBox::from_id_source("key_3")
-                            .selected_text(&self.config.paste_modifier_3)
-                            .show_ui(ui, |ui| {
-                                for &modifier in &all_modifiers {
-                                    if modifier != self.config.paste_modifier_1 && modifier != self.config.paste_modifier_2 {
-                                        ui.selectable_value(&mut self.config.paste_modifier_3, modifier.to_string(), modifier);
-                                    }
-                                }
-                            });
+                        modifier_selector_ui(
+                            ui,
+                            &mut [
+                                &mut self.config.paste_modifier_1,
+                                &mut self.config.paste_modifier_2,
+                                &mut self.config.paste_modifier_3,
+                            ],
+                            "paste_mod",
+                            &[
+                                self.config.modifier_1.clone(),
+                                self.config.modifier_2.clone(),
+                                self.config.modifier_3.clone(),
+                            ],
+                        );
                     });
+                    ui.label("+ Number [0-9]");
                 });
             });
 
-            ui.separator();
-
-            let mut parts = vec![
-                self.config.modifier_1.clone(),
-                self.config.modifier_2.clone(),
-                self.config.modifier_3.clone(),
-            ];
-            parts.retain(|p| p != "None");
-            let shortcut = format!("Copy: {} + Number [0-9]", parts.join(" + "));
-            ui.label(RichText::new("Current shortcut format:").strong());
-            ui.label(RichText::new(shortcut));
-
-            let mut paste_parts = vec![
-                self.config.paste_modifier_1.clone(),
-                self.config.paste_modifier_2.clone(),
-                self.config.paste_modifier_3.clone(),
-            ];
-            paste_parts.retain(|p| p != "None");
-            let paste_shortcut = format!("Paste: {} + Number [0-9]", paste_parts.join(" + "));
-            ui.label(RichText::new(paste_shortcut));
-
-            if parts == paste_parts {
-                ui.colored_label(egui::Color32::RED, "⚠️ Copy y Paste no pueden tener la misma combinación");
+            for error in validate_combinations(
+                [
+                    &self.config.modifier_1,
+                    &self.config.modifier_2,
+                    &self.config.modifier_3,
+                ],
+                [
+                    &self.config.paste_modifier_1,
+                    &self.config.paste_modifier_2,
+                    &self.config.paste_modifier_3,
+                ],
+            ) {
+                ui.colored_label(Color32::RED, error);
             }
 
             ui.separator();
-            ui.checkbox(&mut self.config.is_enabled, "Enable MemoryBank");
 
-            if self.config != self.last_sent_config {
+            if ui.button("Apply").clicked() {
                 send_config_to_daemon(&self.config);
                 self.last_sent_config = self.config.clone();
             }
 
-            ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
-                ui.separator();
-                ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
-                    ui.hyperlink_to("by neurons.me", "https://neurons.me");
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut self.config.is_enabled, "Enable MemoryBank");
+
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.hyperlink_to(
+                        RichText::new("by neurons.me").color(Color32::from_rgb(130, 130, 150)),
+                        "https://neurons.me",
+                    );
                 });
             });
         });
     }
 }
 
+
 fn main() -> eframe::Result<()> {
     let config = fetch_config_from_daemon().unwrap_or_default();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size(egui::vec2(460.0, 300.0)),
+            .with_inner_size(egui::vec2(377.0, 244.0))
+            .with_resizable(true),
         ..Default::default()
     };
 
     eframe::run_native(
-        "MemoryBank GUI",
+        "",
         options,
         Box::new(|_cc| Box::new(MemoryBankApp {
             last_sent_config: config.clone(),
